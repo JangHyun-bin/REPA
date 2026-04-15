@@ -1,0 +1,13 @@
+# === reeval-only deps (added on top of dl conda env) ===
+# 이미 dl env에 있는 것: torch 2.6+cu124, torchvision, diffusers, transformers,
+#                       datasets, accelerate, scipy, opencv-python, pandas,
+#                       matplotlib, huggingface_hub, torch_fidelity
+#
+# 본 파일은 dl conda env에 추가로 설치할 패키지만 명시.
+clean-fid
+lpips
+flask
+seaborn
+pyyaml
+scikit-image
+pytest
