@@ -1,2 +1,18 @@
 *.DS_Store
 .vscode/
+# === reeval workflow ===
+# 학습 산출물 (영구 저장 안 함)
+data/ffhq256_latents/
+exps/
+results/main/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# 임시
+*.tmp
+/tmp/
