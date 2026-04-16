@@ -1,0 +1,8 @@
+{
+  "wallclock_5k_sec": 707.0,
+  "it_per_sec": 7.07,
+  "hours_per_5k": 0.196,
+  "hours_per_400k": 15.7,
+  "hours_2_runs": 31.4,
+  "within_budget": true
+}
