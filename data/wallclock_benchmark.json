@@ -1,8 +1,17 @@
 {
-  "wallclock_5k_sec": 707.0,
-  "it_per_sec": 7.07,
-  "hours_per_5k": 0.196,
-  "hours_per_400k": 15.7,
-  "hours_2_runs": 31.4,
-  "within_budget": true
+  "model": "SiT-L/2",
+  "params": "466M",
+  "batch_size": 8,
+  "gradient_accumulation_steps": 4,
+  "effective_batch": 32,
+  "B2_baseline": {
+    "it_per_sec": 7.07,
+    "hours_per_400k": 15.7
+  },
+  "L2_measured": {
+    "it_per_sec": 2.25,
+    "hours_per_400k": 49.4,
+    "hours_2_runs": 98.8
+  },
+  "decision": "proceed with L/2 \u2014 user approved 4-day commitment"
 }

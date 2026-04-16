@@ -277,6 +277,7 @@ def main(args):
     n = ys.size(0)
     xT = torch.randn((n, 4, latent_size, latent_size), device=device)
         
+    grad_norm = torch.tensor(0.0, device=device)
     for epoch in range(args.epochs):
         model.train()
         for raw_image, x, y in train_dataloader:
