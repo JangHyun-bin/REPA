@@ -348,7 +348,7 @@ def main(args):
                     torch.cuda.empty_cache()
                     n_vis = 4
                     vis_xT = xT[:n_vis]
-                    vis_ys = ys[:n_vis]
+                    vis_ys = torch.zeros(n_vis, dtype=torch.long, device=device)  # FFHQ = always label 0
                     with torch.no_grad():
                         vis_samples = euler_sampler(
                             model, vis_xT, vis_ys,
