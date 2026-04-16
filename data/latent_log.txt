@@ -1,0 +1,18 @@
+/home/famoz/miniconda3/envs/dl/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py:202: UserWarning: The `local_dir_use_symlinks` argument is deprecated and ignored in `hf_hub_download`. Downloading to a local directory does not use symlinks anymore.
+  warnings.warn(
+encoding 70000 images → data/ffhq256-prelim/vae-sd
+[5000/70000] rate=83.9 img/s
+[10000/70000] rate=84.0 img/s
+[15000/70000] rate=84.0 img/s
+[20000/70000] rate=84.0 img/s
+[25000/70000] rate=83.9 img/s
+[30000/70000] rate=83.9 img/s
+[35000/70000] rate=83.9 img/s
+[40000/70000] rate=83.9 img/s
+[45000/70000] rate=83.9 img/s
+[50000/70000] rate=83.9 img/s
+[55000/70000] rate=83.9 img/s
+[60000/70000] rate=83.9 img/s
+[65000/70000] rate=83.9 img/s
+[70000/70000] rate=83.9 img/s
+✓ saved 70000 latents + dataset.json (data/ffhq256-prelim/vae-sd/dataset.json)
