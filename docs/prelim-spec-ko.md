@@ -4,7 +4,7 @@
 **상태**: 설계 완료, 구현 대기
 **목적**: Full 5-branch study 착수 전 가설 premise de-risk
 **Parent spec**: `spec-ko.md` (full 5-branch study)
-**기간**: 2-3 일 (약 36 GPU-hours)
+**기간**: 4-5 일 (약 104 GPU-hours)
 **코드베이스**: `sihyun-yu/REPA` fork, branch `prelim-baseline` (git worktree at `/home/famoz/projects/dl/REPA-prelim/`)
 
 ---
@@ -62,11 +62,12 @@ Full study 의 B2 (cosine decay), B3 (cosine warmup), B4 (hard cutoff) 는 preli
 
 | Hyperparameter | 값 | 출처 |
 |---|---|---|
-| Backbone | SiT-B/2 (130M, patch=2, depth=12, hidden=768, heads=12) | spec §5.1 |
+| Backbone | SiT-L/2 (466M, patch=2, depth=24, hidden=1024, heads=16) | spec §5.1 |
 | Input | SD-VAE latent 4×32×32, 256 tokens | spec §5.1 |
 | Teacher (B1 only) | DINOv2 ViT-B frozen, patch tokens (CLS 제외) | spec §5.2 |
 | Projection layer (B1 only) | Single MLP block 8 hidden → 768 dim | spec §5.1 |
-| Batch size | 32 | spec §5.5 |
+| Batch size | 8 (gradient accumulation 4 → effective batch 32) | spec §5.5 |
+| Gradient accumulation | 4 | preliminary-only (VRAM 제약, RTX 4080 16GB) |
 | Precision | bf16 mixed (accelerate) | spec §5.5 |
 | Optimizer | AdamW lr=1e-4, betas=(0.9, 0.999), wd=0 | spec §5.3 |
 | Gradient clip | max-norm 1.0 | spec §5.3 |
@@ -141,7 +142,7 @@ Full study 는 4 포인트 (20K, 50K, 80K, 100K) 이지만, preliminary 는 traj
 | **Positive** | ✓ | ✓ | 가설 premise 둘 다 성립. Full study 가치 있음. | **Full study 진행** (reeval branch 복귀, Day 3 이후 tutorial 계속) |
 | **Codebase OK, 가설 반박** | ✓ | ✗ | REPA 는 작동하지만 우리가 찾던 trade-off 가 이 regime 에선 없음. 주관적 관찰은 confounder 탓일 가능성. | **Full study 재검토**. (a) null-finding paper 로 direction 변경, (b) 다른 regime (더 큰 model, 다른 dataset) 탐색, (c) 연구 중단. |
 | **Codebase 문제** | ✗ | (무관) | B1 FID 가 B0 FID 보다 높거나 같음 → 우리 REPA hook 에 bug, 또는 FFHQ 에서 REPA 효과 약함. | **Debug 필수**. (a) equivalence test (`schedule_off ≡ REPA-disabled`) 재실행, (b) projection loss 의 gradient flow 확인, (c) REPA 원본 hyperparameter 대조. Full study 착수 금지. |
-| **양쪽 모두 null** | ✗ | ✗ | 학습이 미수렴이거나 우리 FFHQ-SD-VAE setup 이 SiT-B/2 에 부적합. | **Hyperparameter 재검토**. batch, lr, step budget 조정. Full study 중단 또는 장기 연기. |
+| **양쪽 모두 null** | ✗ | ✗ | 학습이 미수렴이거나 우리 FFHQ-SD-VAE setup 이 SiT-L/2 에 부적합. | **Hyperparameter 재검토**. batch, lr, step budget 조정. Full study 중단 또는 장기 연기. |
 
 ### 4.2 정량 기준
 
@@ -190,17 +191,17 @@ Preliminary 종료 시 `results_prelim.md` 파일에 다음 기록:
 | 최소 코드 수정 | 2-4 h | dataset loader, `--repa_on/off` flag, checkpoint policy |
 | Latent precompute (70K) | ~30 min | reeval 의 precompute_latents 재사용 |
 | FID reference stats | ~10 min | reeval 의 precompute_fid_ref 재사용 |
-| **B0 학습 (400K steps)** | **~14 h** | batch=32, 4080, bf16 (가정, wallclock pilot 전) |
-| **B1 학습 (400K steps)** | **~14 h** | B0 완료 후 순차 실행 |
+| **B0 학습 (400K steps)** | **~49 h** | batch=8 (grad accum 4, effective 32), 4080, bf16 (가정, wallclock pilot 전) |
+| **B1 학습 (400K steps)** | **~49 h** | B0 완료 후 순차 실행 |
 | Eval (16 checkpoints × ~15 min) | ~4 h | 학습과 병행 가능하면 wallclock 절감 |
 | 분석 + 결정 | 2 h | plot 생성, 4.1 매트릭스 적용 |
-| **합계** | **~36 h** | ≈ **1.5-2 일 연속 GPU** |
+| **합계** | **~104 h** | ≈ **~4.3 일 연속 GPU** |
 
-Buffer (debug, 재시작) 포함 **2-3 일** 예상. Full study budget 52h 대비 약 60%.
+Buffer (debug, 재시작) 포함 **4-5 일** 예상. Full study budget 52h 대비 약 200%.
 
 ### 5.1 Wallclock 가정의 불확실성
 
-현 시점 (Day 2 끝) 까지 **실제 wallclock 측정은 없음**. 14h/run 은 spec §9 의 외삽에 기반한 추정. Preliminary 의 첫 번째 run (B0) 의 처음 5K step 에서 실제 속도 측정 → 400K 외삽 → 만약 예상보다 현저히 느리면 (**> 20h/run**) 중단 후 step budget 조정 고려.
+현 시점 (Day 2 끝) 까지 **실제 wallclock 측정은 없음**. 49h/run 은 spec §9 의 외삽에 기반한 추정 (SiT-L/2 466M, batch=8, grad accum 4). Preliminary 의 첫 번째 run (B0) 의 처음 5K step 에서 실제 속도 측정 → 400K 외삽 → 만약 예상보다 현저히 느리면 (**> 60h/run**) 중단 후 step budget 조정 고려.
 
 ---
 
@@ -234,7 +235,7 @@ Buffer (debug, 재시작) 포함 **2-3 일** 예상. Full study budget 52h 대�
 │   └── fid_ref_ffhq256.npz         # NEW
 ├── exps/
 │   ├── b0_s42/                     # pure SiT
-│   │   ├── checkpoints/ema_*.pt    # 8 ckpts (50K 간격, EMA only bf16)
+│   │   ├── checkpoints/ema_*.pt    # 8 ckpts (50K 간격, EMA only bf16, ~932 MB each, ≈ 7.5 GB per run)
 │   │   ├── loss_log.csv
 │   │   └── eval_*/
 │   │       ├── metrics.json
@@ -339,7 +340,7 @@ open('data/ffhq256_eval.txt','w').write('\n'.join(sorted(indices[65000:])) + '\n
 "
 ```
 
-### 7.5 학습 실행 (tmux 권장, 연속 ~28h)
+### 7.5 학습 실행 (tmux 권장, 연속 ~99h)
 
 ```bash
 tmux new -s prelim

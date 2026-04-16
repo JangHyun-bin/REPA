@@ -4,7 +4,7 @@
 
 **Goal:** Full 5-branch study 착수 전 2-branch (B0 pure SiT, B1 SiT+REPA-fixed) × 1 seed × 400K steps 을 FFHQ-256 에서 비교하여 (Q1) REPA 논문의 수렴 가속 효과 재현 + (Q2) sharpness/diversity trade-off signature 탐지.
 
-**Architecture:** 기존 `sihyun-yu/REPA` upstream 의 `train.py` 를 *거의 그대로* 사용하고, (1) FFHQ-256 raw JPEG + SD-VAE latent 을 REPA 의 `CustomDataset` 포맷으로 pre-생성하고, (2) `train.py` 의 checkpoint save 블록을 EMA-only bf16 으로만 *한 번* patch, (3) `--proj-coeff 0` vs `0.5` 로 B0/B1 을 구분 실행. 모든 작업은 git worktree (`/home/famoz/projects/dl/REPA-prelim`, branch `prelim-baseline`, base `67f7145`) 에서 격리 수행.
+**Architecture:** 기존 `sihyun-yu/REPA` upstream 의 `train.py` 를 *거의 그대로* 사용하고, (1) FFHQ-256 raw JPEG + SD-VAE latent 을 REPA 의 `CustomDataset` 포맷으로 pre-생성하고, (2) `train.py` 의 checkpoint save 블록을 EMA-only bf16 으로만 *한 번* patch, (3) `--proj-coeff 0` vs `0.5` 로 B0/B1 을 구분 실행. **모델: SiT-L/2 (466M params), batch=8, gradient_accumulation_steps=4 (effective batch 32).** 모든 작업은 git worktree (`/home/famoz/projects/dl/REPA-prelim`, branch `prelim-baseline`, base `67f7145`) 에서 격리 수행.
 
 **Tech Stack:** PyTorch 2.6+cu124, accelerate (bf16 mixed precision), diffusers (SD-VAE-ft-mse), HuggingFace datasets (FFHQ streaming), clean-fid, scipy (Wasserstein), matplotlib. **dl conda env** 재사용 (이미 reeval branch 에서 구축됨).
 
@@ -57,9 +57,9 @@
 │   │   ├── args.json
 │   │   ├── logs/log.txt
 │   │   └── checkpoints/
-│   │       ├── 0050000.pt               # EMA-only bf16, ~260 MB
+│   │       ├── 0050000.pt               # EMA-only bf16, ~932 MB
 │   │       ├── 0100000.pt
-│   │       ├── ... 0400000.pt           # 8 ckpts × ~260 MB ≈ 2 GB
+│   │       ├── ... 0400000.pt           # 8 ckpts × ~932 MB ≈ 7.5 GB
 │   └── b1_s42/                          # SiT+REPA (proj-coeff=0.5)
 │       └── (동일 구조)
 ├── results/
@@ -79,10 +79,10 @@
 **Disk 예산** (영구 사용, preliminary 종료 시점):
 - Raw images: ~3.5 GB
 - Latents: ~2.2 GB
-- Checkpoints: ~4 GB (2 runs × 8 × 260 MB)
+- Checkpoints: ~15 GB (2 runs × 8 × 932 MB)
 - Eval samples (stream-compute, preview 만 보관): <1 GB
 - Logs + results + figures: <1 GB
-- **총 ~11 GB** (가용 97 GB 내 여유 충분)
+- **총 ~20 GB** (가용 97 GB 내 여유 충분)
 
 ---
 
@@ -757,7 +757,7 @@ git commit -m "data: clean-fid Inception ref stats from eval split (5K)"
 
 **목표**: REPA 의 `train.py` 에서 checkpoint save 블록 **1군데만** patch. 다른 수정 없음. **예상 시간**: 30 분.
 
-**왜 patch 가 필요**? REPA 의 기본 save 는 full state (`model`, `ema`, `opt`, `args`, `steps`) 로 checkpoint 당 ~2 GB. 16 checkpoints × 2 runs × 2 GB = 64 GB → spec §4.4 budget 위반. EMA-only bf16 (~260 MB × 16 = ~4 GB) 로 줄임.
+**왜 patch 가 필요**? REPA 의 기본 save 는 full state (`model`, `ema`, `opt`, `args`, `steps`) 로 checkpoint 당 ~2 GB. 16 checkpoints × 2 runs × 2 GB = 64 GB → spec §4.4 budget 위반. EMA-only bf16 (~932 MB × 16 = ~15 GB) 로 줄임.
 
 ### Task 4.1: Patch train.py checkpoint save
 
@@ -839,9 +839,10 @@ git commit -m "patch: train.py checkpoint save → EMA-only bf16 (prelim only)"
 source /home/famoz/miniconda3/bin/activate dl
 accelerate launch train.py \
     --exp-name smoke_test \
-    --model SiT-B/2 \
+    --model SiT-L/2 \
     --data-dir data/ffhq256-prelim \
-    --batch-size 32 \
+    --batch-size 8 \
+    --gradient-accumulation-steps 4 \
     --mixed-precision bf16 \
     --max-train-steps 10 \
     --checkpointing-steps 10 \
@@ -872,7 +873,7 @@ Expected: 10 step 후 `Saved EMA-only bf16 checkpoint to exps/smoke_test/checkpo
 ⚠ **트러블슈팅**:
 - **`ModuleNotFoundError: No module named 'wandb'`**: tensorboard 대신 wandb 가 default 일 수 있음. `--report-to tensorboard` 확실히 전달 or `pip install wandb` 한 번만.
 - **`KeyError: num_classes 1`** or model init 실패: num_classes=1 로 embedding table size 문제 가능. 그 경우 num_classes=1000 유지 (전부 label=0 이면 동일 효과). CLI 만 바꾸면 됨.
-- **OOM**: batch_size 를 32 → 16 으로.
+- **OOM**: batch_size 를 8 → 4 으로 (gradient_accumulation_steps 는 유지).
 
 - [ ] **Step 2**: Checkpoint 파일 size 확인.
 
@@ -880,7 +881,7 @@ Expected: 10 step 후 `Saved EMA-only bf16 checkpoint to exps/smoke_test/checkpo
 ls -la exps/smoke_test/checkpoints/
 ```
 
-Expected: `0000010.pt` 가 ~260 MB (EMA bf16 만).
+Expected: `0000010.pt` 가 ~932 MB (EMA bf16 만).
 
 - [ ] **Step 3**: Checkpoint 로드 테스트.
 
@@ -936,9 +937,10 @@ source /home/famoz/miniconda3/bin/activate dl
 SECONDS=0
 accelerate launch train.py \
     --exp-name wallclock_pilot_b0 \
-    --model SiT-B/2 \
+    --model SiT-L/2 \
     --data-dir data/ffhq256-prelim \
-    --batch-size 32 \
+    --batch-size 8 \
+    --gradient-accumulation-steps 4 \
     --mixed-precision bf16 \
     --max-train-steps 5000 \
     --checkpointing-steps 5000 \
@@ -984,9 +986,9 @@ out = {
     'hours_per_100k_extrap': hours_per_100k,
     'hours_per_400k_extrap': hours_per_400k,
     'hours_2_runs_extrap': hours_per_2_runs,
-    'spec_estimate_hours_per_run': 14,
-    'spec_estimate_hours_total': 28,
-    'within_budget': hours_per_2_runs < 40,
+    'spec_estimate_hours_per_run': 49,
+    'spec_estimate_hours_total': 99,
+    'within_budget': hours_per_2_runs < 120,
 }
 print(json.dumps(out, indent=2))
 open('data/wallclock_benchmark.json','w').write(json.dumps(out, indent=2))
@@ -997,10 +999,10 @@ open('data/wallclock_benchmark.json','w').write(json.dumps(out, indent=2))
 
 | `hours_per_400k` 값 | 의미 | 행동 |
 |---|---|---|
-| ≤ 12h | spec 외삽보다 빠름 | 그대로 main run 진행 |
-| 12-16h | spec 정확, 28-32 GPU-hours 총 | 진행 |
-| 16-20h | 외삽 underestimate, 32-40h 총 | 진행 (buffer 줄어듦) |
-| > 20h | 40h+ 총, timeline 위협 | **STOP**. step budget 을 300K 또는 200K 로 감축 후 재검토. |
+| ≤ 40h | spec 외삽보다 빠름 | 그대로 main run 진행 |
+| 40-55h | spec 정확, 80-110 GPU-hours 총 | 진행 |
+| 55-70h | 외삽 underestimate, 110-140h 총 | 진행 (buffer 줄어듦) |
+| > 70h | 140h+ 총, timeline 위협 | **STOP**. step budget 을 300K 또는 200K 로 감축 후 재검토. |
 
 - [ ] **Step 4**: Cleanup + commit.
 
@@ -1014,7 +1016,7 @@ git commit -m "data: wallclock pilot B0 5K steps (extrapolate to 400K × 2 runs)
 
 ## Phase 6 — B0 Training (pure SiT, 400K)
 
-**목표**: `--proj-coeff 0` 로 pure SiT baseline 학습. 400K steps, seed 42. **예상 시간**: ~14 h.
+**목표**: `--proj-coeff 0` 로 pure SiT baseline 학습. 400K steps, seed 42. **예상 시간**: ~49 h.
 
 ### Task 6.1: Launch B0 in tmux
 
@@ -1033,9 +1035,10 @@ DISK_PID=$!
 
 accelerate launch train.py \
     --exp-name b0_s42 \
-    --model SiT-B/2 \
+    --model SiT-L/2 \
     --data-dir data/ffhq256-prelim \
-    --batch-size 32 \
+    --batch-size 8 \
+    --gradient-accumulation-steps 4 \
     --mixed-precision bf16 \
     --max-train-steps 400000 \
     --checkpointing-steps 50000 \
@@ -1071,12 +1074,12 @@ ls exps/b0_s42/checkpoints/
 🔍 **Expected progress**:
 - 50K step 마다 `Saved EMA-only bf16 checkpoint to exps/b0_s42/checkpoints/00XX0000.pt`
 - 총 8 checkpoints 생성 (50K, 100K, ..., 400K)
-- 총 wallclock ~14h (pilot 기반)
+- 총 wallclock ~49h (pilot 기반)
 
 ⚠ **트러블슈팅**:
 - **NaN loss**: 학습 발산. Log 확인, 필요 시 재시작. (Pure SiT 는 발산 가능성 낮음.)
 - **CUDA OOM**: 다른 프로세스가 GPU 쓰는지 확인 (`nvidia-smi`).
-- **tmux 세션 loss (system reboot)**: run 재시작. Full checkpoint save 안 하므로 처음부터 다시. 시간 손실 ~14h.
+- **tmux 세션 loss (system reboot)**: run 재시작. Full checkpoint save 안 하므로 처음부터 다시. 시간 손실 ~49h.
 - **Disk alert**: `data/disk_log_b0.csv` 에서 원인 확인. exps/ 크기 점검.
 
 - [ ] **Step 5**: Run 완료 후 검증.
@@ -1086,7 +1089,7 @@ ls -la exps/b0_s42/checkpoints/
 du -sh exps/b0_s42/
 ```
 
-Expected: 8 개 `.pt` 파일 (0050000~0400000), 총 ~2 GB.
+Expected: 8 개 `.pt` 파일 (0050000~0400000), 총 ~7.5 GB.
 
 - [ ] **Step 6**: Commit log (checkpoints 는 gitignored).
 
@@ -1099,7 +1102,7 @@ git commit -m "data: B0 (pure SiT, proj-coeff=0) 400K steps complete"
 
 ## Phase 7 — B1 Training (SiT+REPA-fixed, 400K)
 
-**목표**: `--proj-coeff 0.5` 로 REPA-fixed 학습. 400K steps, seed 42. **예상 시간**: ~14 h.
+**목표**: `--proj-coeff 0.5` 로 REPA-fixed 학습. 400K steps, seed 42. **예상 시간**: ~49 h.
 
 ### Task 7.1: Launch B1 in tmux
 
@@ -1118,9 +1121,10 @@ DISK_PID=$!
 
 accelerate launch train.py \
     --exp-name b1_s42 \
-    --model SiT-B/2 \
+    --model SiT-L/2 \
     --data-dir data/ffhq256-prelim \
-    --batch-size 32 \
+    --batch-size 8 \
+    --gradient-accumulation-steps 4 \
     --mixed-precision bf16 \
     --max-train-steps 400000 \
     --checkpointing-steps 50000 \
@@ -1152,7 +1156,7 @@ du -sh exps/b1_s42/
 du -sh exps/
 ```
 
-Expected: B1 에도 8 개 checkpoint, 총 exps/ 크기 ~4 GB (두 run 합친).
+Expected: B1 에도 8 개 checkpoint, 총 exps/ 크기 ~15 GB (두 run 합친).
 
 - [ ] **Step 5**: Commit log.
 
@@ -1272,8 +1276,8 @@ def precision_recall(gen_uint8, ref_uint8, device, k=3):
 def load_ema_model(ckpt_path, device):
     ckpt = torch.load(ckpt_path, map_location="cpu")
     ema_state = ckpt["ema"]
-    # Build SiT-B/2 with same config as training
-    model = SiT_models["SiT-B/2"](
+    # Build SiT-L/2 with same config as training
+    model = SiT_models["SiT-L/2"](
         input_size=32,
         num_classes=1,
         use_cfg=False,
@@ -1434,7 +1438,7 @@ python scripts/eval_prelim.py \
 Expected: 완료 시 `results/b0_s42_0050000.json` 에 FID, sharpness, P/R 출력. Pipeline 전체 동작 확인.
 
 ⚠ **트러블슈팅**:
-- **model init mismatch**: `SiT_models["SiT-B/2"]` 의 생성 인자가 training 시와 달라 ema state load 실패 가능. `load_ema_model` 의 args 를 train.py 에서 실제 호출한 값으로 정확히 맞춤. 만약 mismatch 면 훈련 시 사용된 파라미터 (`num_classes`, `use_cfg`, `z_dims`, `encoder_depth`, `fused_attn`, `qk_norm`) 를 train.py 의 `args.json` (`exps/b0_s42/args.json`) 에서 읽어 사용.
+- **model init mismatch**: `SiT_models["SiT-L/2"]` 의 생성 인자가 training 시와 달라 ema state load 실패 가능. `load_ema_model` 의 args 를 train.py 에서 실제 호출한 값으로 정확히 맞춤. 만약 mismatch 면 훈련 시 사용된 파라미터 (`num_classes`, `use_cfg`, `z_dims`, `encoder_depth`, `fused_attn`, `qk_norm`) 를 train.py 의 `args.json` (`exps/b0_s42/args.json`) 에서 읽어 사용.
 - **CUDA OOM during sampling**: `--batch_size 16` 으로.
 - **euler_sampler signature mismatch**: `samplers.py` 가 예상과 다르면 signature 조정.
 
@@ -1840,7 +1844,7 @@ git commit -m "analysis: apply prelim-spec §4.2 decision rules"
 ## 1. Setup confirmation
 
 - Dataset: merkol/ffhq-256, rev f23c0e21, 70000 samples, 256×256, JPEG Q95
-- Model: SiT-B/2, batch=32, bf16, 400K steps
+- Model: SiT-L/2, batch=8 (grad_accum=4, effective batch 32), bf16, 400K steps
 - Branches: B0 (proj-coeff=0) and B1 (proj-coeff=0.5), seed=42 each
 - Wallclock (B0): XXh, (B1): XXh
 - Checkpoints: 8 per run (50K, 100K, …, 400K)
@@ -1978,7 +1982,7 @@ git log --oneline --all --graph --decorate -20
 
 - §1 Q1 + Q2 정의 → Task 9.2 decision rule에 구현
 - §2.1 B0/B1 정의 → Phase 6 / 7 (proj-coeff 0 vs 0.5)
-- §2.2 하이퍼파라미터 → Phase 6/7 의 accelerate launch 인자 (batch=32, bf16, SiT-B/2, AdamW 기본값, grad_clip=1.0)
+- §2.2 하이퍼파라미터 → Phase 6/7 의 accelerate launch 인자 (batch=8, grad_accum=4, effective_batch=32, bf16, SiT-L/2, AdamW 기본값, grad_clip=1.0)
 - §2.3 Dataset → Phase 1-3 (merkol, JPEG, SD-VAE moments, split)
 - §3.1 8 eval checkpoints (50K 간격) → Phase 6/7 의 `--checkpointing-steps 50000` + Phase 8 sweep
 - §3.2 FID + sharpness W₁ (3 stats) + P/R + preview → Task 8.1 eval_prelim.py 구현
