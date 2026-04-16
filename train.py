@@ -337,36 +337,41 @@ def main(args):
                     torch.save(checkpoint, checkpoint_path)
                     logger.info(f"Saved EMA-only bf16 checkpoint to {checkpoint_path}")
 
-            if (global_step % args.sampling_steps == 0 and global_step > 0):
-                from samplers import euler_sampler
-                with torch.no_grad():
-                    samples = euler_sampler(
-                        model, 
-                        xT, 
-                        ys,
-                        num_steps=50, 
-                        cfg_scale=4.0,
-                        guidance_low=0.,
-                        guidance_high=1.,
-                        path_type=args.path_type,
-                        heun=False,
-                    ).to(torch.float32)
-                    samples = vae.decode((samples -  latents_bias) / latents_scale).sample
-                    gt_samples = vae.decode((gt_xs - latents_bias) / latents_scale).sample
-                    samples = (samples + 1) / 2.
-                    gt_samples = (gt_samples + 1) / 2.
-                out_samples = accelerator.gather(samples.to(torch.float32))
-                gt_samples = accelerator.gather(gt_samples.to(torch.float32))
-                accelerator.log({"samples": wandb.Image(array2grid(out_samples)),
-                                 "gt_samples": wandb.Image(array2grid(gt_samples))})
-                logging.info("Generating EMA samples done.")
+                    # Sample 4 images at each checkpoint for wandb visualization
+                    from samplers import euler_sampler
+                    torch.cuda.empty_cache()
+                    n_vis = 4
+                    vis_xT = xT[:n_vis]
+                    vis_ys = ys[:n_vis]
+                    with torch.no_grad():
+                        vis_samples = euler_sampler(
+                            model, vis_xT, vis_ys,
+                            num_steps=50, cfg_scale=1.0,
+                            guidance_low=0., guidance_high=1.,
+                            path_type=args.path_type, heun=False,
+                        ).to(torch.float32)
+                        vis_decoded = vae.decode((vis_samples - latents_bias) / latents_scale).sample
+                        vis_decoded = (vis_decoded.clamp(-1, 1) + 1) / 2.
+                    accelerator.log({
+                        "samples": wandb.Image(array2grid(vis_decoded)),
+                    }, step=global_step)
+                    del vis_samples, vis_decoded
+                    torch.cuda.empty_cache()
+                    logger.info(f"Logged {n_vis} sample images to wandb at step {global_step}")
 
             logs = {
-                "loss": accelerator.gather(loss_mean).mean().detach().item(), 
-                "proj_loss": accelerator.gather(proj_loss_mean).mean().detach().item(),
-                "grad_norm": accelerator.gather(grad_norm).mean().detach().item()
+                "train/denoise_loss": accelerator.gather(loss_mean).mean().detach().item(),
+                "train/proj_loss": accelerator.gather(proj_loss_mean).mean().detach().item(),
+                "train/total_loss": accelerator.gather(loss_mean + proj_loss_mean * args.proj_coeff).mean().detach().item(),
+                "train/grad_norm": accelerator.gather(grad_norm).mean().detach().item(),
+                "train/proj_coeff": args.proj_coeff,
+                "train/step": global_step,
             }
-            progress_bar.set_postfix(**logs)
+            progress_bar.set_postfix(**{
+                "loss": logs["train/denoise_loss"],
+                "proj": logs["train/proj_loss"],
+                "gnorm": logs["train/grad_norm"],
+            })
             accelerator.log(logs, step=global_step)
 
             if global_step >= args.max_train_steps:
