@@ -77,14 +77,15 @@ class SILoss:
         model_output, zs_tilde  = model(model_input, time_input.flatten(), **model_kwargs)
         denoising_loss = mean_flat((model_output - model_target) ** 2)
 
-        # projection loss
-        proj_loss = 0.
-        bsz = zs[0].shape[0]
-        for i, (z, z_tilde) in enumerate(zip(zs, zs_tilde)):
-            for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
-                z_tilde_j = torch.nn.functional.normalize(z_tilde_j, dim=-1) 
-                z_j = torch.nn.functional.normalize(z_j, dim=-1) 
-                proj_loss += mean_flat(-(z_j * z_tilde_j).sum(dim=-1))
-        proj_loss /= (len(zs) * bsz)
+        # projection loss (skipped entirely when zs is empty → proj_coeff=0 path)
+        proj_loss = torch.tensor(0.0, device=images.device)
+        if len(zs) > 0:
+            bsz = zs[0].shape[0]
+            for i, (z, z_tilde) in enumerate(zip(zs, zs_tilde)):
+                for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
+                    z_tilde_j = torch.nn.functional.normalize(z_tilde_j, dim=-1)
+                    z_j = torch.nn.functional.normalize(z_j, dim=-1)
+                    proj_loss += mean_flat(-(z_j * z_tilde_j).sum(dim=-1))
+            proj_loss /= (len(zs) * bsz)
 
         return denoising_loss, proj_loss

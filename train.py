@@ -154,13 +154,14 @@ def main(args):
     assert args.resolution % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder)."
     latent_size = args.resolution // 8
 
-    if args.enc_type != None:
+    if args.proj_coeff > 0 and args.enc_type != None:
         encoders, encoder_types, architectures = load_encoders(
             args.enc_type, device, args.resolution
             )
+        z_dims = [encoder.embed_dim for encoder in encoders]
     else:
-        raise NotImplementedError()
-    z_dims = [encoder.embed_dim for encoder in encoders] if args.enc_type != 'None' else [0]
+        encoders, encoder_types, architectures = [], [], []
+        z_dims = [768]  # keep model architecture identical (projection head exists but unused)
     block_kwargs = {"fused_attn": args.fused_attn, "qk_norm": args.qk_norm}
     model = SiT_models[args.model](
         input_size=latent_size,
@@ -295,14 +296,17 @@ def main(args):
                 labels = y
             with torch.no_grad():
                 x = sample_posterior(x, latents_scale=latents_scale, latents_bias=latents_bias)
-                zs = []
-                with accelerator.autocast():
-                    for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
-                        raw_image_ = preprocess_raw_image(raw_image, encoder_type)
-                        z = encoder.forward_features(raw_image_)
-                        if 'mocov3' in encoder_type: z = z = z[:, 1:] 
-                        if 'dinov2' in encoder_type: z = z['x_norm_patchtokens']
-                        zs.append(z)
+                if args.proj_coeff > 0 and len(encoders) > 0:
+                    zs = []
+                    with accelerator.autocast():
+                        for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
+                            raw_image_ = preprocess_raw_image(raw_image, encoder_type)
+                            z = encoder.forward_features(raw_image_)
+                            if 'mocov3' in encoder_type: z = z = z[:, 1:]
+                            if 'dinov2' in encoder_type: z = z['x_norm_patchtokens']
+                            zs.append(z)
+                else:
+                    zs = []
 
             with accelerator.accumulate(model):
                 model_kwargs = dict(y=labels)
