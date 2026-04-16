@@ -267,7 +267,7 @@ def main(args):
     sample_batch_size = 64 // accelerator.num_processes
     gt_raw_images, gt_xs, _ = next(iter(train_dataloader))
     assert gt_raw_images.shape[-1] == args.resolution
-    gt_xs = gt_xs[:sample_batch_size]
+    gt_xs = gt_xs[:sample_batch_size].squeeze(1)
     gt_xs = sample_posterior(
         gt_xs.to(device), latents_scale=latents_scale, latents_bias=latents_bias
         )
@@ -327,18 +327,16 @@ def main(args):
                 global_step += 1                
             if global_step % args.checkpointing_steps == 0 and global_step > 0:
                 if accelerator.is_main_process:
-                    checkpoint = {
-                        "model": model.module.state_dict(),
-                        "ema": ema.state_dict(),
-                        "opt": optimizer.state_dict(),
-                        "args": args,
-                        "steps": global_step,
+                    ema_bf16 = {
+                        k: v.detach().to(torch.bfloat16).cpu()
+                        for k, v in ema.state_dict().items()
                     }
+                    checkpoint = {"ema": ema_bf16, "steps": global_step}
                     checkpoint_path = f"{checkpoint_dir}/{global_step:07d}.pt"
                     torch.save(checkpoint, checkpoint_path)
-                    logger.info(f"Saved checkpoint to {checkpoint_path}")
+                    logger.info(f"Saved EMA-only bf16 checkpoint to {checkpoint_path}")
 
-            if (global_step == 1 or (global_step % args.sampling_steps == 0 and global_step > 0)):
+            if (global_step % args.sampling_steps == 0 and global_step > 0):
                 from samplers import euler_sampler
                 with torch.no_grad():
                     samples = euler_sampler(
