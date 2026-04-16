@@ -337,7 +337,9 @@ def main(args):
                     torch.save(checkpoint, checkpoint_path)
                     logger.info(f"Saved EMA-only bf16 checkpoint to {checkpoint_path}")
 
-                    # Sample 4 images at each checkpoint for wandb visualization
+            # Sample vis every --vis-steps (~1h = 8000 steps), decoupled from checkpoint save
+            if global_step % args.vis_steps == 0 and global_step > 0:
+                if accelerator.is_main_process:
                     from samplers import euler_sampler
                     torch.cuda.empty_cache()
                     n_vis = 4
@@ -396,6 +398,7 @@ def parse_args(input_args=None):
     parser.add_argument("--logging-dir", type=str, default="logs")
     parser.add_argument("--report-to", type=str, default="wandb")
     parser.add_argument("--sampling-steps", type=int, default=10000)
+    parser.add_argument("--vis-steps", type=int, default=8000, help="Sample vis interval (~1h at 2.25 it/s)")
     parser.add_argument("--resume-step", type=int, default=0)
 
     # model
