@@ -1,0 +1,11 @@
+{
+  "n_samples": 256,
+  "hf_dataset": "merkol/ffhq-256",
+  "batch_size": 32,
+  "psnr_db": 29.579607725143433,
+  "lpips_alex": 0.029825615230947733,
+  "thresholds": {
+    "psnr_db_min": 28.0,
+    "lpips_max": 0.1
+  }
+}

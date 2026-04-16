@@ -1,2 +1,13 @@
 *.DS_Store
 .vscode/
+# === prelim workflow ===
+data/ffhq256-prelim/
+data/ffhq256_latents/
+exps/
+results/main/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.tmp

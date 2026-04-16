@@ -1,0 +1,32 @@
+{
+  "dataset": {
+    "hf_id": "merkol/ffhq-256",
+    "revision": "f23c0e21f6fe222b4429272a86be00e4583b0298",
+    "split_train": "train",
+    "expected_total": 70000,
+    "license": "inherits FFHQ original (CC BY-NC-SA 4.0; NVIDIA, Karras et al. 2019)",
+    "discovered_at": "2026-04-15",
+    "discovery_notes": "Selected from HF Hub search of 40 'ffhq' candidates. merkol/ffhq-256 chosen for: (a) exactly 256x256 PNG, (b) clean schema with single 'image' field, (c) confirmed 70000 train samples in dataset card, (d) parquet format, (e) sha stable since 2023-08-28."
+  },
+  "splits": {},
+  "latents_train": {},
+  "sd_vae_sanity": {
+    "n_samples": 256,
+    "psnr_db": 29.5796,
+    "lpips_alex": 0.0298,
+    "thresholds": {
+      "psnr_db_min": 28.0,
+      "lpips_max": 0.1
+    },
+    "verdict": "PASSED",
+    "tested_on": "2026-04-15",
+    "vae": "stabilityai/sd-vae-ft-mse",
+    "cross_validation_mirror": {
+      "id": "idning/ffhq256-caption",
+      "n_samples": 64,
+      "psnr_db": 29.716,
+      "lpips_alex": 0.0288,
+      "note": "Independent mirror confirms ~29.6 dB is SD-VAE-ft-mse limit, not mirror artifact"
+    }
+  }
+}
